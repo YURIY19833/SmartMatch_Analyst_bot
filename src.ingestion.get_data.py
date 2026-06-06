@@ -1,11 +1,24 @@
+import os
+import logging
 import requests
 import psycopg2
 import pandas as pd
 import io
-from db_config import DB_CONFIG
+from db_config import DB_CONFIG, get_connection
 
-API_KEY = "b740a1b91b624bd9b9e6be752ce6898f"
-HEADERS = {"X-Auth-Token": API_KEY}
+logger = logging.getLogger(__name__)
+
+# Require API key from environment for security; do not fall back to hardcoded key
+API_KEY = os.environ.get("FOOTBALL_API_KEY")
+HEADERS = {"X-Auth-Token": API_KEY} if API_KEY else {}
+
+DB_CONFIG = {
+    "dbname": "sports_db",
+    "user": "user",
+    "password": "password",
+    "host": "localhost",
+    "port": "5432",
+}
 
 # Словарь для синхронизации названий команд из CSV-архива с форматом API
 TEAM_MAPPING = {
@@ -38,7 +51,7 @@ TEAM_MAPPING = {
 
 def fetch_and_save():
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_connection()
     except psycopg2.OperationalError as e:
         print(f"Ошибка подключения к БД: {e}")
         return
@@ -46,11 +59,19 @@ def fetch_and_save():
     cur = conn.cursor()
 
     # === ЧАСТЬ 1: Загрузка ТЕКУЩЕГО сезона из API (без фильтра по году работает отлично) ===
-    print("Загрузка текущего сезона из API...")
+    logger.info("Loading current season from API...")
     url_current = "https://api.football-data.org/v4/competitions/PL/matches"
-    response = requests.get(url_current, headers=HEADERS)
+    try:
+        if not API_KEY:
+            logger.warning("FOOTBALL_API_KEY is not set; skipping current season API fetch.")
+            response = None
+        else:
+            response = requests.get(url_current, headers=HEADERS, timeout=15)
+    except requests.RequestException as e:
+        logger.error("Network error when requesting current season: %s", e)
+        response = None
 
-    if response.status_code == 200:
+    if response is not None and response.status_code == 200:
         data = response.json()
         matches = data.get("matches", [])
         saved_api = 0
@@ -72,22 +93,32 @@ def fetch_and_save():
                 (match_date, team_1, team_2, score_1, score_2),
             )
             saved_api += cur.rowcount
-        print(f"[API] Добавлено/обновлено актуальных матчей: {saved_api}")
+        logger.info("[API] Added/updated current matches: %d", saved_api)
     else:
-        print(
-            f"[ОШИБКА API] Не удалось загрузить текущий сезон: Код {response.status_code}"
-        )
+        if response is None:
+            logger.warning("[API] No response from API server (network issues or skipped).")
+        else:
+            logger.error("[API] Failed to fetch current season: HTTP %s", response.status_code)
+            # Показываем тело ответа для диагностики, если есть
+            try:
+                logger.debug("Response body: %s", response.text[:1000])
+            except Exception:
+                pass
 
     # === ЧАСТЬ 2: Загрузка ИСТОРИЧЕСКИХ сезонов из бесплатного репозитория (22/23, 23/24, 24/25) ===
     csv_seasons = ["2223", "2324", "2425", "2526"]
 
     for season in csv_seasons:
-        print(f"Загрузка архивного сезона {season} из футбольного репозитория...")
+        logger.info("Downloading archive season %s from football-data.co.uk...", season)
         csv_url = f"https://www.football-data.co.uk/mmz4281/{season}/E0.csv"
 
-        res = requests.get(csv_url)
+        try:
+            res = requests.get(csv_url, timeout=15)
+        except requests.RequestException as e:
+            logger.error("Network error when downloading %s: %s", season, e)
+            continue
         if res.status_code != 200:
-            print(f"[ОШИБКА] Не удалось скачать данные для сезона {season}")
+            logger.error("Failed to download season %s: HTTP %s", season, res.status_code)
             continue
 
         # Читаем CSV напрямую в оперативную память через Pandas
@@ -128,15 +159,14 @@ def fetch_and_save():
             )
             saved_csv += cur.rowcount
 
-        print(
-            f"[АРХИВ] Для сезона {season} успешно импортировано новых матчей: {saved_csv}"
-        )
+        logger.info("[ARCHIVE] Season %s imported: %d new rows", season, saved_csv)
 
     conn.commit()
     cur.close()
     conn.close()
-    print("\n--- [УСПЕХ] Сбор всех данных (API + Архив) успешно завершен! ---")
+    logger.info("Data collection complete (API + Archive).")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     fetch_and_save()

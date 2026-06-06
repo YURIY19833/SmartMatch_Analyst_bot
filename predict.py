@@ -2,8 +2,8 @@ import psycopg2
 import joblib
 import pandas as pd
 
-# Тянем настройки подключения прямо из твоего рабочего конфига, который использует get_data.py
-from db_config import DB_CONFIG
+# Тянем настройки подключения прямо из твоего рабочего конфига
+from db_config import get_connection
 
 
 def get_team_features(team_name, cur):
@@ -24,9 +24,7 @@ def get_team_features(team_name, cur):
         row = cur.fetchone()
 
     if not row:
-        raise ValueError(
-            f"❌ Команда '{team_name}' не найдена в базе данных. Проверь название."
-        )
+        raise ValueError(f"Команда '{team_name}' не найдена в базе данных. Проверь название.")
 
     return {
         "avg_scored": row[0],
@@ -43,17 +41,15 @@ def predict_match(home_team, away_team):
     try:
         model = joblib.load("football_model.pkl")
     except FileNotFoundError:
-        return "❌ Ошибка: файл модели 'football_model.pkl' не найден."
+        return "Error: model file 'football_model.pkl' not found."
 
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_connection()
         cur = conn.cursor()
         home_features = get_team_features(home_team, cur)
         away_features = get_team_features(away_team, cur)
     except psycopg2.OperationalError as e:
-        return (
-            f"❌ Ошибка подключения к базе данных. Проверь db_config.py.\nДетали: {e}"
-        )
+        return f"Database connection error: {e}"
     except ValueError as e:
         return str(e)
     finally:
@@ -85,36 +81,36 @@ def predict_match(home_team, away_team):
     prob_home_win = probabilities[1] * 100
     prob_other = probabilities[0] * 100
 
-    result = f"\nАНАЛИЗ МАТЧА: {home_team} vs {away_team}\n"
-    result += "---\n"
-    result += f"Вероятность победы {home_team} (хозяева): {prob_home_win:.1f}%\n"
-    result += f"Вероятность X2 (ничья или победа {away_team}): {prob_other:.1f}%\n"
-    result += "---\n"
+    result = f"\nMATCH ANALYSIS: {home_team} vs {away_team}\n"
+    result += "-------------------------\n"
+    result += f"Probability home win ({home_team}): {prob_home_win:.1f}%\n"
+    result += f"Probability draw/away win ({away_team}): {prob_other:.1f}%\n"
+    result += "-------------------------\n"
 
     if prediction == 1:
-        result += f"Рекомендация: ставка на победу хозяев ({home_team})\n"
+        result += f"Recommendation: bet on home win ({home_team})\n"
     else:
-        result += "Рекомендация: ставка на не-проигрыш гостей (X2)\n"
+        result += "Recommendation: draw or away win (X2)\n"
 
     return result
 
 
 if __name__ == "__main__":
-    print("🤖 Инференс-движок успешно подключен к db_config!")
-    print("Для выхода из программы в любой момент введи 'exit'.\n")
+    print("Inference engine connected to db_config.")
+    print("Type 'exit' to quit.\n")
 
     while True:
-        print("🟢 Свежий прогноз:")
-        home = input("Введите команду хозяев (например, liverpool): ").strip()
+        print("New prediction:")
+        home = input("Enter home team (e.g. liverpool): ").strip()
         if home.lower() == "exit":
             break
 
-        away = input("Введите команду гостей (например, chelsea): ").strip()
+        away = input("Enter away team (e.g. chelsea): ").strip()
         if away.lower() == "exit":
             break
 
         if not home or not away:
-            print("⚠️ Названия команд не могут быть пустыми!")
+            print("Team names cannot be empty!")
             continue
 
         print(predict_match(home, away))
