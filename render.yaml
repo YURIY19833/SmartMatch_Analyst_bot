@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: srcingestion-web
+    env: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: Dockerfile
+    # envVars can be set in Render dashboard; do NOT store secrets here
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: FOOTBALL_API_KEY
+        sync: false
