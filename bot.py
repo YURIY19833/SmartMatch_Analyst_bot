@@ -3,8 +3,15 @@ import telebot
 # Импортируем нашу готовую функцию прогноза из соседнего файла
 from predict import predict_match
 
-# ⚠️ Сюда нужно будет вставить токен, который выдает @BotFather в Telegram
-BOT_TOKEN = "8890309320:AAElSGG-Ua5lMiVZBRjIm6y5JdfYDmhDvgg"
+# Telegram bot token should come from the environment for security.
+# Set TELEGRAM_TOKEN in Render or your local .env file.
+import os
+
+BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError(
+        "TELEGRAM_TOKEN is not set. Please set it in environment variables."
+    )
 
 bot = telebot.TeleBot(BOT_TOKEN)
 

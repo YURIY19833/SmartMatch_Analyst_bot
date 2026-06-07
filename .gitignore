@@ -1,0 +1,13 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Data files
+sports_data_cleaned.csv
+
+# VS Code
+.vscode/

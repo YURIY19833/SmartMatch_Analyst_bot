@@ -19,6 +19,7 @@ services:
     region: oregon
     branch: main
     dockerfilePath: Dockerfile
+    startCommand: python bot.py
     # This worker runs the Telegram bot process. Set TELEGRAM_TOKEN in Render env.
     envVars:
       - key: TELEGRAM_TOKEN
