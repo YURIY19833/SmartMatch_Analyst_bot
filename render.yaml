@@ -12,3 +12,16 @@ services:
         sync: false
       - key: FOOTBALL_API_KEY
         sync: false
+  - type: worker
+    name: srcingestion-bot
+    env: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: Dockerfile
+    # This worker runs the Telegram bot process. Set TELEGRAM_TOKEN in Render env.
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
